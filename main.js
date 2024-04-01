@@ -7,12 +7,14 @@ var paddle1X = 10, paddle1Height = 110;
 var paddle2Y = 685, paddle2Height = 70;
 
 var score1 = 0, score2 = 0;
-var paddle1Y;
+var paddle1Y=0;
 
 var playerscore = 0;
 var audio1;
 var pcscore = 0;
 NumeroDeJugadores=0
+var estatus=0
+var paddle2y=0
 //pelota x, y, y la velocidad speedx, y y radio
 var ball = {
   x: 350 / 2,
@@ -29,7 +31,7 @@ function setup() {
   video = createCapture(VIDEO)
   video.hide()
   coordenadas = ml5.poseNet(video, listo)
-  coordenadas.on("pose", respuesta)
+  //coordenadas.on("pose", respuesta)
   fondo=createImg("background1.jpg")
   fondo.position(0,0)
   nombre = createInput("").attribute("placeholder","Ingresa tu nombre")
@@ -39,6 +41,15 @@ function setup() {
   h2=createElement("h2")
   h2.position(width/2,height/2)
   enviar.mousePressed(Ingresar)
+  firebase.database().ref("estatus").on("value",(datos)=>{
+    estatus=datos.val()
+  })
+  firebase.database().ref("pelota").on("value",(datos)=>{
+    ball.x=datos.val().x;
+    ball.y=datos.val().y;
+    ball.dx=datos.val().dx;
+    ball.dy=datos.val().dy;
+  })
 }
 manoY = 0
 function listo() {
@@ -51,7 +62,25 @@ function respuesta(poses) {
   }
 }
 function draw() {
-
+if(estatus==1){
+  if(!localStorage.getItem("jugador2")){
+    firebase.database().ref("jugadores").once("value",(datos)=>{
+        datos.forEach(function (reg) {
+          childKey = reg.key;
+          if (childKey != localStorage.getItem("jugador1")) {
+                localStorage.setItem("jugador2", childKey)
+                console.log(localStorage.getItem("jugador2"));
+                firebase.database().ref("jugadores/"+localStorage.getItem("jugador2")).on("value",(data2)=>{
+                  paddle2y = data2.val().y  - paddle2Height / 2
+            })
+          }
+        });
+  });
+}
+  enviar.hide()
+  nombre.hide()
+  h2.hide()
+  fondo.hide()
   background(0);
   image(video, 0, 0, 350, 480)
   fill("black");
@@ -69,14 +98,18 @@ function draw() {
   fill(250, 0, 0);
   stroke(0, 0, 250);
   strokeWeight(0.5);
-  paddle1Y = manoY;
+  //paddle1Y = manoY;
+  firebase.database().ref("jugadores/"+localStorage.getItem("jugador1")).update({
+    y: mouseY
+  })
   rect(paddle1X, paddle1Y, paddle1, paddle1Height, 100);
   rectMode(CENTER)
 
   //paleta de la computadora
   fill("#FFA500");
   stroke("#FFA500");
-  var paddle2y = ball.y - paddle2Height / 2; rect(paddle2Y, paddle2y, paddle2, paddle2Height, 100);
+  //var paddle2y = ball.y - paddle2Height / 2; 
+  rect(paddle2Y, paddle2y, paddle2, paddle2Height, 100);
 
   //llamar a la función midline 
   midline();
@@ -89,6 +122,12 @@ function draw() {
 
   //llamar a la función move que es muy importante
   move();
+}else{
+  enviar.show()
+  nombre.show()
+  h2.show()
+  fondo.show()
+}
 }
 
 
@@ -142,13 +181,29 @@ function move() {
     if (ball.y >= paddle1Y && ball.y <= paddle1Y + paddle1Height) {
       ball.dx = -ball.dx + 0.5;
       playerscore++;
-      sonido.play()
+    //sonido.play()
+      firebase.database().ref("pelota").update({
+        x:ball.x + ball.dx,
+        y:ball.y + ball.dy,
+        dx: ball.dx,
+        dy: ball.dy
+      })
     }
     else {
       pcscore++;
       reset();
-      navigator.vibrate(100);
+      //navigator.vibrate(100);
     }
+  }
+  if (ball.y + ball.r > height || ball.y - ball.r < 0) {
+    //sonido.play()
+    ball.dy = - ball.dy;
+    firebase.database().ref("pelota").update({
+      x:ball.x + ball.dx,
+      y:ball.y + ball.dy,
+      dx: ball.dx,
+      dy: ball.dy
+    })
   }
   if (pcscore == 4) {
     fill("#FFA500");
@@ -161,10 +216,6 @@ function move() {
     text("¡Volver a cargar la página!", width / 2, height / 2 + 30)
     noLoop();
     pcscore = 0;
-  }
-  if (ball.y + ball.r > height || ball.y - ball.r < 0) {
-    sonido.play()
-    ball.dy = - ball.dy;
   }
 }
 
@@ -192,7 +243,12 @@ function Ingresar(){
     if (datos.numChildren()===2){
       h2.hide()
       fondo.hide()
+      firebase.database().ref("/").update({estatus: 1})
     }
+  })
+  localStorage.setItem("jugador1", nombre.value());
+  firebase.database().ref("jugadores/"+localStorage.getItem("jugador1")).on("value",(data)=>{
+    paddle1Y = data.val().y
   })
 }
 
